@@ -1,34 +1,304 @@
 ---
-title: "EV Power - Lab 4 Project Report"
+title: "Analysis of U.S. Electricity Prices and Renewable Energy Trends (2021–2023)"
 format: typst
 ---
 
-# Example Solution 1
+# Overview
+
+This project investigates how U.S. states are transitioning toward cleaner energy and how that relates to electricity costs from 2021 to 2023. The analysis focuses on three questions:\
+\
+1. How does the share of renewable electricity generation vary across U.S. states in 2023?\
+2. Which U.S. states experienced the fastest growth in renewable energy use from 2021 to 2023?\
+3. How do average electricity prices compare across U.S. states from 2021 to 2023?
+
+To answer these questions, multiple raw datasets were loaded and cleaned, including state-level electricity generation by energy source (2021–2023), total electricity use (2023), and average electricity price by state (2021–2023). Columns were renamed for consistency, units and symbols were removed from numeric values, and state names were standardized so they could be joined across files.
+
+After cleaning, the data were summarized by state. For renewable energy, total renewable electricity use in 2023 was divided by total electricity use in 2023 to calculate each state's renewable share. Growth in renewable energy was then measured by comparing total renewable output in 2021 vs. 2023 and computing both absolute and percentage change. For electricity prices, prices from 2021–2023 were reshaped from wide to long format, missing values were replaced with 0 where needed, and a three-year average price was calculated for each state.
+
+Finally, these summarized tables were joined with U.S. state map geometry and visualized as choropleth maps.
 
 ## **Part 0: libraries**
 
 ```{r}
-
+library(tidyverse)
+library(readr)
+library(dplyr) 
+library(ggplot2)
+library(maps  )
 ```
 
 ## **Part 1:** **Defining Research Question**
 
-Chosen Question:
+Question 1: How does the share of renewable electricity generation vary across U.S. states in 2023?\
+Question 2: Which U.S. states experienced the fastest growth in renewable energy use from 2021 to 2023?\
+Question 3: How do average electricity prices across U.S. states compare from 2021 to 2023?
 
 ## **Part 2: Data Preparation and Cleaning**
 
-```{r}
+[Question 1 Data Cleaning:]{.underline} How does the share of renewable electricity generation vary across U.S. states in 2023?
 
+```{r}
+renew_2023 <- read_csv("data/renew-use-2023.csv")
+total_2023 <- read_csv("data/total-use-2023.csv")
+```
+
+```{r}
+#renew-use-2023.csv data cleaning 
+colnames(renew_2023) <- c("state", "energy_source", "renewable_use_2023")
+
+renew_2023 <- renew_2023 |>
+    mutate(state = str_to_upper(state))
+
+renew_2023 <- renew_2023 |>
+    mutate(renewable_use_2023 = str_remove_all(renewable_use_2023, "kWh|MWh|\\s"),
+           renewable_use_2023 = as.numeric(renewable_use_2023))
+
+head(renew_2023)
+```
+
+```{r}
+#total-use-2023.csv data cleaning
+total_2023 <- total_2023 |>
+    pivot_longer(cols = -Energy_Source, names_to = "state", values_to = "total_use_2023")
+
+total_2023 <- total_2023 |>
+    mutate(state = str_to_upper(state),     
+           total_use_2023 = as.numeric(total_use_2023),  
+           energy_source = str_to_lower(Energy_Source)) |>
+    select(state, energy_source, total_use_2023)    
+
+head(total_2023)
+```
+
+[Question 2 Data Cleaning:]{.underline} Which U.S. states experienced the fastest growth in renewable energy use from 2021 to 2023?
+
+renew_2023 has already been data cleaned in the previous step.
+
+```{r}
+renew_2021 <- read_csv("data/renew-use-2021.csv")
+renew_2022 <- read_csv("data/renew-use-2022.csv")
+```
+
+```{r}
+#renew-use-2021.csv data cleaning
+renew_2021 <- renew_2021[, 1:3]
+colnames(renew_2021) <- c("state", "energy_source", "renewable_use_2021")
+
+renew_2021 <- renew_2021 |>
+    mutate(renewable_use_2021 = str_remove_all(renewable_use_2021,"kWh|MWh|MMBtu|USD|\\$|~|est\\.|about|per|\\s"),
+           renewable_use_2021 = as.numeric(renewable_use_2021)) |>
+           filter(!is.na(renewable_use_2021))
+
+head(renew_2021)
+```
+
+```{r}
+#renew-use-2022.csv data cleaning
+renew_2022 <- renew_2022[, 1:3]
+colnames(renew_2022) <- c("state", "energy_source", "renewable_use_2022")
+
+renew_2022 <- renew_2022 |>
+  mutate(renewable_use_2022 = str_remove_all(renewable_use_2022,"kWh|MWh|MMBtu|USD|\\$|~|est\\.|about|per|\\s"),
+         renewable_use_2022 = as.numeric(renewable_use_2022)) |>
+  filter(!is.na(renewable_use_2022))
+
+head(renew_2022)
+```
+
+[Question 3 Data Cleaning:]{.underline} How do average electricity prices across U.S. states compare from 2021 t0 2023?
+
+```{r}
+avg_price2021_2023 <- read_csv("data/av-energy-price-2021-2023.csv", col_names = FALSE)
+```
+
+```{r}
+#av-energy-price-2021-2023.csv data clean
+
+price_clean <- avg_price2021_2023 |>
+    separate(X1, into = c("state", "price_2021", "price_2022", "price_2023"), sep = ",") |>
+    mutate(price_2021 = str_remove_all(price_2021, "USD|per|MMBtu|about|est\\.|\\$|\\s"),
+           price_2022 = str_remove_all(price_2022, "USD|per|MMBtu|about|est\\.|\\$|\\s"),
+           price_2023 = str_remove_all(price_2023, "USD|per|MMBtu|about|est\\.|\\$|\\s"),
+           price_2021 = as.numeric(price_2021),
+           price_2022 = as.numeric(price_2022),
+           price_2023 = as.numeric(price_2023))
+
+head(price_clean)
 ```
 
 ## **Part 3: Joining / Pivoting Datasets for Analysis**
 
-```{r}
+[Question 1 Joining/Pivoting:]{.underline} How does the share of renewable electricity generation vary across U.S. states in 2023?\
+Step 1) Summarize renewable electricity use by state\
+Step 2) Summarize total electricity use by state\
+Step 3) Join the two summaries to calculate renewable share (2023)
 
+```{r}
+renew_2023 <- renew_2023 |> mutate(state = toupper(state))
+total_2023 <- total_2023 |> mutate(state = toupper(state))
+
+renew_state_2023 <- renew_2023 |>
+  group_by(state) |>
+  summarise(total_renewable_2023 = sum(renewable_use_2023, na.rm = TRUE))
+
+total_state_2023 <- total_2023 |>
+  group_by(state) |>
+  summarise(total_energy_2023 = sum(total_use_2023, na.rm = TRUE))
+
+energy_joined_2023 <- left_join(renew_state_2023, total_state_2023, by = "state") |>
+  mutate(renewable_share_2023 = total_renewable_2023 / total_energy_2023 * 100)
+
+energy_joined_2023
+```
+
+[Question 2 Joining/Pivoting:]{.underline} Which U.S. states experienced the fastest growth in renewable energy use from 2021 to 2023?\
+Step 1) Summarize each year's data\
+Step 2) Join all three years together\
+Step 3) Calculate growth\
+Step 4) Identify top states with fastest growth
+
+```{r}
+renew_2021_state <- renew_2021 |>
+    group_by(state) |>
+    summarise(total_renew_2021 = sum(renewable_use_2021, na.rm = TRUE))
+
+renew_2022_state <- renew_2022 |>
+    group_by(state) |>
+    summarise(total_renew_2022 = sum(renewable_use_2022, na.rm = TRUE))
+
+renew_2023_state <- renew_2023 |>
+    group_by(state) |>
+    summarise(total_renew_2023 = sum(renewable_use_2023, na.rm = TRUE))
+```
+
+```{r}
+renew_all <- renew_2021_state |>
+    left_join(renew_2022_state, by = "state") |>
+    left_join(renew_2023_state, by = "state")
+
+renew_all
+```
+
+```{r}
+renew_all <- renew_all |>
+    mutate(growth_21_23 = total_renew_2023 - total_renew_2021,
+    pct_growth_21_23 = (growth_21_23 / total_renew_2021) * 100)
+
+renew_all
+```
+
+```{r}
+top_growth <- renew_all |>
+  arrange(desc(pct_growth_21_23))
+
+head(top_growth)
+```
+
+[Question 3 Joining/Pivoting:]{.underline} How do average electricity prices compare across U.S. states from 2021 to 2023?\
+1. Replace NAs values with 0\
+2. Pivot to longer format\
+3. Calculate average electricity price per state across 2021-2023
+
+```{r}
+price_clean <- price_clean |>
+    mutate(price_2021 = ifelse(is.na(price_2021), 0, price_2021),
+           price_2022 = ifelse(is.na(price_2022), 0, price_2022),
+           price_2023 = ifelse(is.na(price_2023), 0, price_2023))
+price_clean
+```
+
+```{r}
+price_long <- price_clean |>
+    pivot_longer(cols = starts_with("price_"),
+                 names_to = "year",
+                 values_to = "price") |>
+    mutate(year = str_remove(year, "price_"),
+           price = as.numeric(price))
+
+price_long
+```
+
+```{r}
+price_avg_state <- price_long |>
+    group_by(state) |>
+    summarize(avg_price = mean(price, na.rm = TRUE))
+
+price_avg_state <- price_avg_state |>
+    mutate(state = tolower(state.name[match(state, state.abb)]))
+
+price_avg_state
 ```
 
 ## **Part 4: Mapping Visualization**
 
-```{r}
+Question 1: How does the share of renewable electricity generation vary across U.S. states in 2023?
 
+```{r}
+us_map <- map_data("state")
+
+state_data <- energy_joined_2023 |>
+    mutate(state = ifelse(!is.na(match(toupper(state), state.abb)),
+                        tolower(state.name[match(toupper(state), state.abb)]),
+                        tolower(state)))
+
+
+us_map_joined <- us_map |>
+    left_join(state_data, by = c("region" = "state"))
+
+ggplot(us_map_joined, aes(long, lat, group = group, fill = renewable_share_2023)) +
+    geom_polygon(color = "white") +
+    coord_fixed(1.3) +
+    scale_fill_viridis_c() +
+    theme_minimal() +
+    labs(title = "Share of Renewable Electricity by State (2023)",
+    subtitle = "Brighter colors indicate higher renewable energy share")
 ```
+
+Question 2: Which U.S. states experienced the fastest growth in renewable energy use from 2021 to 2023?
+
+```{r}
+us_map <- map_data("state")
+
+renew_all <- renew_all |>
+  mutate(state = ifelse(
+      !is.na(match(toupper(state), state.abb)),
+      tolower(state.name[match(toupper(state), state.abb)]),
+      tolower(state)))
+
+us_map_joined <- us_map |>
+    left_join(renew_all, by = c("region" = "state"))
+
+ggplot(us_map_joined, aes(long, lat, group = group, fill = pct_growth_21_23)) +
+    geom_polygon(color = "white") +
+    coord_fixed(1.3) +
+    scale_fill_viridis_c() +
+    theme_minimal() +
+    labs(title = "Growth in Renewable Energy Use by State (2021–2023)",
+         subtitle = "Brighter colors indicate faster growth in renewable energy use")
+```
+
+Question 3: How do average electricity prices compare across U.S. states from 2021 to 2023?
+
+```{r}
+us_map <- map_data("state")
+
+us_map_joined <- left_join(us_map, price_avg_state, by = c("region" = "state"))
+
+ggplot(us_map_joined, aes(long, lat, group = group, fill = avg_price)) +
+    geom_polygon(color = "white") +
+    coord_fixed(1.3) +
+    theme_minimal() +
+    scale_fill_viridis_c() +
+    labs(title = "Average Electricity Prices by U.S. State (2021–2023)",
+         subtitle = "Brighter ccolors indicate higher average price") 
+```
+
+## **Analysis**
+
+The first map shows that in 2023, states with high renewable electricity shares—such as California, Oregon, Washington, and Maine—are better positioned to charge EVs using cleaner energy. In contrast, many southern and midwestern states still rely heavily on fossil fuels, meaning that EVs charged there may indirectly depend on non-renewable sources.
+
+The second map, which tracks renewable energy growth from 2021 to 2023, indicates that most states have seen slow but positive progress toward cleaner electricity generation. Mississippi stands out as an outlier with particularly high growth, suggesting that some traditionally fossil-fuel-dependent regions are beginning to transition. However, the generally modest increases highlight that nationwide progress toward renewable-based electricity remains uneven.
+
+The third map on average electricity prices reveals that states with higher renewable shares, including California and northeastern states, often face higher electricity costs. This may reflect investments in renewable infrastructure and regional market differences. In contrast, central and southern states, where fossil fuels remain dominant, tend to have lower prices but also less clean electricity.
+
+Taken together, these findings suggest that EVs are not equally “clean” across all states. While EVs reduce direct tailpipe emissions everywhere, the carbon intensity of charging depends on each state’s energy mix. States with stronger renewable portfolios provide genuinely cleaner charging, while others may still rely heavily on coal or natural gas–based electricity.
